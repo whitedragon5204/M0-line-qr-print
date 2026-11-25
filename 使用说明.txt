@@ -1,0 +1,28 @@
+PACK / 客户码 纸条打印
+
+位置：D:\Program\HostComputer\PackLabelPrint
+用 VS 打开 PackLabelPrint.sln，生成后跑 PackLabelPrint.exe。
+本机也可以：dotnet build PackLabelPrint.csproj -c Release
+
+干什么
+  领码：一次向 MES 领一对新码（PACK type=1，客户码 type=2）。两颗不必业务绑定，只要都是新号
+  打印：一张纸两个二维码，纸张内对称居中；PACK 明文两行，客户码明文一行
+  作废：只清空本窗。MES 已经发出的号收不回
+  刻码以后扫纸上的两个码去刻；日期仍走刻码 TCP 的 Give me date
+
+不要
+  不要去连刻码机的 11000/12000/13000
+
+另一台电脑
+  要能访问 MES（GenerateUrl 和刻码同一套）
+  打印机 TSC TTP-244 Pro。App.config 的 PrinterName 改成设备和打印机里的名字
+  需要 .NET Framework 4.6.1 或 4.8
+  程序按 50×40 毫米一张出纸（码画在上半 20mm）。高度不对会红灯
+  TSC 驱动和现场配置在 D:\Program\HostComputer\PackLabelPrint相关文件
+
+版面
+  纸张 210×79。两个二维码居中；PACK 字两排。
+
+重打旧码
+  右边列表是「PACK | 客户码」。点选后重打，不再向 MES 领号。
+  当天旧的只有 PACK、没有客户码的记录，不能按新版重打。

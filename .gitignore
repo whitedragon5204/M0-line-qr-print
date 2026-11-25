@@ -1,0 +1,26 @@
+# 编译产物，不提交
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.pdb
+
+# 运行日志
+logs/
+**/logs/
+*.log
+
+# NuGet / 本机
+*.nupkg
+packages/
+
+# 驱动、现场配置、压缩包不进本仓库（放在上一级 PackLabelPrint相关文件）
+离线安装包/
+现场配置/
+*.rar
+*.zip
+*.dat
+*.dll
+*.exe
+!PackLabelPrint.sln
