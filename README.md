@@ -1,7 +1,9 @@
 # M0线二维码打印程序
 
-M0 线 PACK / 客户码纸条打印（WinForms，.NET Framework 4.6.1）。  
+M0 线二维码打印（WinForms，.NET Framework 4.6.1）。  
 用 Visual Studio 打开 `PackLabelPrint.sln`，生成后运行 `PackLabelPrint.exe`。
+
+两种模式可切换：`MES领码打印`（向接口领 PACK+客户码再打，本页「MES接口配置」改领码地址）和 `扫码/录入打印`（扫入或手输指定码，查库有才打；本页才显示「数据库配置」）。历史和日志都只留一周，并记下打印时间。
 
 ## 以后怎么提交
 
@@ -29,3 +31,4 @@ M0 线 PACK / 客户码纸条打印（WinForms，.NET Framework 4.6.1）。
 - `Newtonsoft.Json.dll`
 - `zxing.dll`
 - `zxing.presentation.dll`
+- `MySql.Data.dll`（扫码查库要用）

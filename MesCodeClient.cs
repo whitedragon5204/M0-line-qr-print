@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 
 namespace PackLabelPrint
@@ -48,6 +49,57 @@ namespace PackLabelPrint
             pair.Ok = true;
             pair.Message = "领码成功";
             return pair;
+        }
+
+        public static string GenerateUrl
+        {
+            get
+            {
+                string s = ConfigurationManager.AppSettings["GenerateUrl"];
+                return s == null ? "" : s.Trim();
+            }
+        }
+
+        public static void SaveGenerateUrl(string url)
+        {
+            Configuration config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
+            if (config.AppSettings.Settings["GenerateUrl"] == null)
+            {
+                config.AppSettings.Settings.Add("GenerateUrl", url ?? "");
+            }
+            else
+            {
+                config.AppSettings.Settings["GenerateUrl"].Value = url ?? "";
+            }
+            config.Save(ConfigurationSaveMode.Modified);
+            ConfigurationManager.RefreshSection("appSettings");
+        }
+
+        public static string TestUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                throw new Exception("请先填写领码地址");
+            }
+
+            Uri uri;
+            if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                throw new Exception("地址必须是 http 或 https");
+            }
+
+            int port = uri.Port;
+            using (TcpClient client = new TcpClient())
+            {
+                IAsyncResult wait = client.BeginConnect(uri.Host, port, null, null);
+                if (!wait.AsyncWaitHandle.WaitOne(8000))
+                {
+                    throw new Exception("连 MES 超时：" + uri.Host + ":" + port);
+                }
+                client.EndConnect(wait);
+            }
+            return "能连上 " + uri.Host + ":" + port + "。测试不会领码。";
         }
 
         static FetchResult FetchByType(int type, string title)

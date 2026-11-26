@@ -45,6 +45,20 @@ namespace PackLabelPrint
             WaitUntilIdle(printer);
         }
 
+        public static void PrintSpecified(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                throw new Exception("没有可打印的指定码");
+            }
+
+            string printer = ResolveInstalledName(PrinterName);
+            WaitUntilIdle(printer);
+            EnsurePrinterReady(printer);
+            PrintByTsplSpecified(printer, code.Trim());
+            WaitUntilIdle(printer);
+        }
+
         static string ResolveInstalledName(string configured)
         {
             if (string.IsNullOrEmpty(configured))
@@ -264,6 +278,78 @@ namespace PackLabelPrint
             {
                 bmp.Dispose();
             }
+        }
+
+        static void PrintByTsplSpecified(string printer, string code)
+        {
+            string widthMm = CfgText("LabelWidthMm", "50");
+            string heightMm = CfgText("LabelHeightMm", "40");
+            string gapMm = CfgText("LabelGapMm", "3");
+            int widthDots = MmToDots(widthMm, 80);
+            int heightDots = MmToDots(heightMm, 80);
+            widthDots = widthDots - (widthDots % 8);
+
+            Bitmap bmp = new Bitmap(widthDots, heightDots);
+            try
+            {
+                bmp.SetResolution(203f, 203f);
+                using (Graphics g = Graphics.FromImage(bmp))
+                {
+                    g.Clear(Color.White);
+                    DrawSpecified(g, code, widthDots, heightDots);
+                }
+                TsplPrinter.SendBitmap(printer, ToMono(bmp), widthDots, heightDots, widthMm, heightMm, gapMm);
+            }
+            finally
+            {
+                bmp.Dispose();
+            }
+        }
+
+        static void DrawSpecified(Graphics g, string code, int paperW, int paperH)
+        {
+            g.PageUnit = GraphicsUnit.Pixel;
+            g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+            g.SmoothingMode = SmoothingMode.None;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+
+            int inset = Math.Max(8, paperW / 40);
+            int qr = paperW * 16 / 50;
+            if (qr > paperH - inset * 2)
+            {
+                qr = paperH - inset * 2;
+            }
+            int pad = Math.Max(6, paperW / 50);
+            int x1 = inset;
+            int y = Math.Max(inset, (paperH - qr) / 2);
+            DrawQr(g, code, x1, y, qr);
+            float textX = x1 + qr + pad;
+            float textW = paperW - textX - inset;
+            if (textW < 20f)
+            {
+                textW = 20f;
+            }
+            string[] lines = SplitTwo(code);
+            float gap = 6f;
+            float lineH = Math.Max(24f, (qr - gap) / 2f);
+            float block = lines.Length * lineH + (lines.Length - 1) * gap;
+            float textY = y + Math.Max(0f, (qr - block) / 2f);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                DrawCode(g, lines[i], textX, textY + i * (lineH + gap), textW, lineH);
+            }
+        }
+
+        static string[] SplitTwo(string text)
+        {
+            text = text ?? "";
+            if (text.Length <= 1)
+            {
+                return new string[] { text };
+            }
+            int mid = (text.Length + 1) / 2;
+            return new string[] { text.Substring(0, mid), text.Substring(mid) };
         }
 
         static void WaitUntilIdle(string printer)

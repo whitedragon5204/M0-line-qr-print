@@ -1,14 +1,14 @@
-PACK / 客户码 纸条打印
+二维码打印
 
 位置：D:\Program\HostComputer\PackLabelPrint
 用 VS 打开 PackLabelPrint.sln，生成后跑 PackLabelPrint.exe。
 本机也可以：dotnet build PackLabelPrint.csproj -c Release
 
 干什么
-  领码：一次向 MES 领一对新码（PACK type=1，客户码 type=2）。两颗不必业务绑定，只要都是新号
-  打印：一张纸两个二维码，纸张内对称居中；PACK 明文两行，客户码明文一行
-  作废：只清空本窗。MES 已经发出的号收不回
-  刻码以后扫纸上的两个码去刻；日期仍走刻码 TCP 的 Give me date
+  两个分页可随时切换。
+  MES领码打印：一次向 MES 领一对新码（PACK type=1，客户码 type=2），再打印。本页右上角「MES接口配置」改领码地址。作废只清空本窗，MES 号收不回。
+  扫码/录入打印：扫枪或手输指定码，查库有这颗码才打。本页才显示「数据库配置」。标签仍是二维码旁边印明文。
+  右边是一周历史（带打印时间），点选后可重打。日志文件也只留一周。
 
 不要
   不要去连刻码机的 11000/12000/13000

@@ -17,10 +17,30 @@ namespace PackLabelPrint
 
         void FrmPackLabel_Load(object sender, EventArgs e)
         {
+            try { AppLog.PurgeOld(); } catch { }
             lblPrinter.Text = "打印机：" + LabelPrinter.PrinterName;
-            lblLogPath.Text = "日志夹：" + AppLog.LogDir;
+            lblLogPath.Text = "MES日志夹：" + AppLog.Dir("mes");
             LoadHistory();
+            LoadScanHistory();
+            ShowTabButtons();
             AppendLog("程序打开");
+        }
+
+        void tabs_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ShowTabButtons();
+            if (tabs.SelectedTab == tabScan)
+            {
+                txtScan.Focus();
+                txtScan.SelectAll();
+            }
+        }
+
+        void ShowTabButtons()
+        {
+            bool scan = tabs.SelectedTab == tabScan;
+            btnDbConfig.Visible = scan;
+            btnMesConfig.Visible = !scan;
         }
 
         string CurrentPack
@@ -81,7 +101,6 @@ namespace PackLabelPrint
                 }
 
                 _printedOk = false;
-                RememberHistory(CurrentDisplay);
                 AppendLog("领码成功", CurrentDisplay);
                 lblStatus.Text = "已领一对，未打印";
             }
@@ -110,8 +129,9 @@ namespace PackLabelPrint
                 return;
             }
 
+            string codePart = AppLog.HistoryCode(lstHistory.SelectedItem.ToString());
             LabelPair pair;
-            if (!LabelPair.TryParse(lstHistory.SelectedItem.ToString(), out pair) || string.IsNullOrEmpty(pair.Customer))
+            if (!LabelPair.TryParse(codePart, out pair) || string.IsNullOrEmpty(pair.Customer))
             {
                 MessageBox.Show(this, "这条历史只有 PACK，没有客户码，不能按新版重打。请重新领一对。", "重打", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -153,6 +173,7 @@ namespace PackLabelPrint
                 {
                     _printedOk = true;
                 }
+                RememberPrintHistory("mes", shown, lstHistory);
                 AppendLog(fromHistory ? "历史重打成功" : "打印成功", shown);
                 lblStatus.Text = fromHistory ? "历史重打成功" : "打印成功";
             }
@@ -191,41 +212,166 @@ namespace PackLabelPrint
             lblStatus.Text = "已作废（MES 收不回）";
         }
 
-        void btnOpenLog_Click(object sender, EventArgs e)
+        void txtScan_KeyDown(object sender, KeyEventArgs e)
         {
-            try
+            if (e.KeyCode == Keys.Enter)
             {
-                Directory.CreateDirectory(AppLog.LogDir);
-                Process.Start(AppLog.LogDir);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, "打不开日志夹：\n" + AppLog.LogDir + "\n" + ex.Message, "日志", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                e.SuppressKeyPress = true;
+                PrintScan(false);
             }
         }
 
-        void RememberHistory(string code)
+        void btnScanPrint_Click(object sender, EventArgs e)
+        {
+            PrintScan(false);
+        }
+
+        void btnScanReprint_Click(object sender, EventArgs e)
+        {
+            if (lstScanHistory.SelectedItem == null)
+            {
+                MessageBox.Show(this, "先在右边列表点一条，再点重打选中。", "重打", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            txtScan.Text = AppLog.HistoryCode(lstScanHistory.SelectedItem.ToString());
+            PrintScan(true);
+        }
+
+        async void PrintScan(bool fromHistory)
+        {
+            string code = txtScan.Text.Trim();
+            if (string.IsNullOrEmpty(code))
+            {
+                MessageBox.Show(this, fromHistory ? "请先在右边选一条历史" : "请先扫入或手输指定码", "打印", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!fromHistory && AppLog.PrintedThisWeek("scan", code))
+            {
+                AppendLog("扫码拦截", code, "历史已打印");
+                lblScanStatus.Text = "该二维码已打印";
+                MessageBox.Show(this, "该二维码已打印，若需再次打印，请到历史中重打选中", "已打印", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (fromHistory)
+            {
+                DialogResult ask = MessageBox.Show(this, "重打历史码：\n" + code + "\n确认打一张？", "确认重打", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (ask != DialogResult.Yes)
+                {
+                    AppendLog("取消扫码重打", code);
+                    return;
+                }
+            }
+
+            btnScanPrint.Enabled = false;
+            lblScanStatus.Text = "正在查库…";
+            try
+            {
+                string lookupMsg = "";
+                bool ok = await Task.Run(() => DbCodeLookup.Exists(code, out lookupMsg));
+                if (!ok)
+                {
+                    AppendLog("扫码拦截", code, lookupMsg);
+                    lblScanStatus.Text = lookupMsg;
+                    MessageBox.Show(this, lookupMsg, "未打印", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                lblScanStatus.Text = "查库通过，正在连打印机…";
+                LabelPrinter.PrintSpecified(code);
+                RememberPrintHistory("scan", code, lstScanHistory);
+                AppendLog(fromHistory ? "扫码重打成功" : "扫码打印成功", code);
+                lblScanStatus.Text = fromHistory ? "重打成功" : "打印成功";
+                txtScan.Clear();
+                txtScan.Focus();
+            }
+            catch (Exception ex)
+            {
+                AppendLog(fromHistory ? "扫码重打失败" : "扫码打印失败", code, ex.Message);
+                lblScanStatus.Text = "打印失败，可再打";
+                MessageBox.Show(this, "打印失败。\n" + ex.Message, "打印失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                btnScanPrint.Enabled = true;
+            }
+        }
+
+        void btnDbConfig_Click(object sender, EventArgs e)
+        {
+            using (FrmDbConfig dlg = new FrmDbConfig())
+            {
+                dlg.ShowDialog(this);
+            }
+        }
+
+        void btnMesConfig_Click(object sender, EventArgs e)
+        {
+            using (FrmMesConfig dlg = new FrmMesConfig())
+            {
+                dlg.ShowDialog(this);
+            }
+        }
+
+        void btnOpenLog_Click(object sender, EventArgs e)
+        {
+            OpenLogDir("mes");
+        }
+
+        void btnScanOpenLog_Click(object sender, EventArgs e)
+        {
+            OpenLogDir("scan");
+        }
+
+        void OpenLogDir(string kind)
+        {
+            string dir = AppLog.Dir(kind);
+            try
+            {
+                Directory.CreateDirectory(dir);
+                Process.Start(dir);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "打不开日志夹：\n" + dir + "\n" + ex.Message, "日志", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        void RememberPrintHistory(string kind, string text, ListBox list)
         {
             try
             {
-                AppLog.RememberCode(code);
+                AppLog.RememberPrint(kind, text);
             }
             catch
             {
             }
-            lstHistory.Items.Remove(code);
-            lstHistory.Items.Insert(0, code);
-            lstHistory.SelectedIndex = 0;
+            FillHistory(list, kind);
+            if (list.Items.Count > 0)
+            {
+                list.SelectedIndex = 0;
+            }
         }
 
         void LoadHistory()
         {
-            lstHistory.Items.Clear();
+            FillHistory(lstHistory, "mes");
+        }
+
+        void LoadScanHistory()
+        {
+            FillHistory(lstScanHistory, "scan");
+        }
+
+        void FillHistory(ListBox list, string kind)
+        {
+            list.Items.Clear();
             try
             {
-                foreach (string code in AppLog.LoadTodayCodes())
+                foreach (string line in AppLog.LoadWeekHistory(kind))
                 {
-                    lstHistory.Items.Add(code);
+                    list.Items.Add(line);
                 }
             }
             catch
@@ -250,7 +396,7 @@ namespace PackLabelPrint
 
             try
             {
-                AppLog.Write(line);
+                AppLog.Write(tabs.SelectedTab == tabScan ? "scan" : "mes", line);
             }
             catch
             {
